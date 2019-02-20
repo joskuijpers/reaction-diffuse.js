@@ -27,22 +27,19 @@ class State {
         this.dataB = new Array(width * height).fill(0) // Start value of B
     }
 
-    static empty(width, height, startClusterSize) {
-        const state = new State(width, height)
-
-        // Set small area B=1
-        state:seedAtCenter(startClusterSize)
+    seedAtCenter(clusterSize) {
+        this.seedAtPoint(self.width / 2, self.height / 2, clusterSize)
     }
 
-    seedAtCenter(clusterSize) {
+    seedAtPoint(u, v, clusterSize) {
         const halfWidth = Math.ceil(this.width / 2)
         const halfHeight = Math.ceil(this.height / 2)
         const halfClusterSize = Math.ceil(clusterSize / 2)
 
         // In the center
-        for(let u = halfWidth - halfClusterSize; u < halfWidth + halfClusterSize; u++) {
-            for(let v = halfHeight - halfClusterSize; v < halfHeight + halfClusterSize; v++) {
-                this.setPoint(u, v, 0, 1)
+        for(let x = u - halfClusterSize; x < u + halfClusterSize; x++) {
+            for(let y = v - halfClusterSize; y < v + halfClusterSize; y++) {
+                this.setPoint(x, y, 0, 1)
             }
         }
     }
@@ -56,19 +53,19 @@ class State {
     // Get a point
     getPoint(u, v) {
         // Wrapping
-        if (u < 0)
-            u += this.width
-        else if (u > this.width - 1)
-            u -= this.width
-        if (v < 0)
-            v += this.height
-        else if (v > this.height - 1)
-            v -= this.height
+        // if (u < 0)
+        //     u += this.width
+        // else if (u > this.width - 1)
+        //     u -= this.width
+        // if (v < 0)
+        //     v += this.height
+        // else if (v > this.height - 1)
+        //     v -= this.height
 
         // 0,0 at edges
-        // if(u < 0 || u > this.width - 1 || v < 0 || v > this.height - 1) {
-        //     return [0, 0]
-        // }
+        if(u < 0 || u > this.width - 1 || v < 0 || v > this.height - 1) {
+            return [1, 0]
+        }
 
         const pos = u + v * this.width
         return [this.dataA[pos], this.dataB[pos]]
@@ -88,7 +85,13 @@ class State {
             for(let v = 0; v < this.height; v++) {
                 let [a, b] = this.getPoint(u, v)
                 // let norm = Math.sqrt(a * a + b * b)
-                let color = 'rgb(' + a * 255 + ', ' + b * 255 + ', 0)'
+                let color = 'rgb(' + Math.floor(a * 255) + ', 0, ' + Math.floor(b * 255) + ')'
+                // let color
+                // if (a > b)
+                //     color = 'rgb(0, 0, 0)'
+                // else
+                //     color = 'rgb(255, 255, 255)'
+
                 this.pixels[u + v * this.width] = color
             }
         }
@@ -120,7 +123,7 @@ class Picture {
 class Config {
     constructor() {
         this.Da = 1.0
-        this.Db = 0.5
+        this.Db = 0.4
         this.f = 0.055
         this.k = 0.062
         this.dt = 1.0
@@ -141,20 +144,17 @@ class App {
 
     // Draw update
     draw() {
-        this.canvas.drawPicture(this.state, 10)
+        this.canvas.drawPicture(this.state, 1)
     }
 
     // Update
     update(dt) {
-        this.updateAll()
-
-        this.t = this.t - dt
-        if (this.t <= 0) {
-            this.t = 1000
-
-            this.state.updatePixels()
-            this.draw()
+        for (let i = 0; i < 10; i++) {
+            this.updateAll()
         }
+
+        this.state.updatePixels()
+        this.draw()
     }
 
 
@@ -169,54 +169,21 @@ class App {
     updateValue(u, v, dt) {
         let [a, b] = this.state.getPoint(u, v)
 
-        const la = this.laplace_int2(u, v, this.state, 0)
-        const lb = this.laplace_int2(u, v, this.state, 1)
-        // let [la, lb] = this.laplace(u, v)
+        const la = this.laplace(u, v, this.state, 0)
+        const lb = this.laplace(u, v, this.state, 1)
 
-        let an = a + (this.config.Da * la - a * b * b + this.config.f * (1 - a)) * dt * this.config.dt
-        let bn = b + (this.config.Db * lb + a * b * b - (this.config.k + this.config.f) * b) * dt * this.config.dt
+        // let k = (u / this.state.width) * (0.07 - 0.045) + 0.045
+        let k = 0.06
+        let f = 0.05
+        // let f = (v / this.state.width) * (0.1 - 0.01) + 0.01
+
+        let an = a + (this.config.Da * la - a * b * b + f * (1 - a)) * dt * this.config.dt
+        let bn = b + (this.config.Db * lb + a * b * b - (k + f) * b) * dt * this.config.dt
 
         this.state.setPoint(u, v, an, bn)
     }
 
-    // 3x3 convolution with center weight -1, adjacent neighbors 0.2 and diagonals 0.05
-    laplace(u, v) {
-        // let a = [[0, 0, 0],[0, 0, 0],[0, 0, 0]]
-        // let b = [[0, 0, 0],[0, 0, 0],[0, 0, 0]]
-
-        // for(let x = 0; x < 3; x++) {
-        //     for(let y = 0; y < 3; y++) {
-        //         let [p, q] = this.state.getPoint(u + (x - 1), v + (y - 1))
-        //         a[x][y] = p
-        //         b[x][y] = q
-        //     }
-        // }
-
-        // return [this.laplace_int(a), this.laplace_int(b)]
-        return [this.laplace_int2(u, v, this.state, 0), this.laplace_int2(u, v, this.state, 1)]
-    }
-
-    // Single instance laplace
-    laplace_int(data) {
-        const Wc = -1.00
-        const Wn = 0.20
-        const Wd = 0.05
-
-        return 0
-            + data[0][0] * Wd
-            + data[0][1] * Wn
-            + data[0][2] * Wd
-
-            + data[1][0] * Wn
-            + data[1][1] * Wc
-            + data[1][2] * Wn
-
-            + data[2][0] * Wd
-            + data[2][1] * Wn
-            + data[2][2] * Wd
-    }
-
-    laplace_int2(u, v, state, t) {
+    laplace(u, v, state, t) {
         const Wc = -1.00
         const Wn = 0.20
         const Wd = 0.05
@@ -238,8 +205,10 @@ class App {
 }
 
 function start() {
-    const state = new State(50, 50)
-    state.seedAtCenter(2)
+    let size = 200
+    const state = new State(size, size)
+    state.seedAtPoint(20, 50, 10)
+    state.seedAtPoint(60, 20, 10)
 
     const config = new Config()
 
