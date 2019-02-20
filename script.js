@@ -53,19 +53,18 @@ class State {
     // Get a point
     getPoint(u, v) {
         // Wrapping
-        // if (u < 0)
-        //     u += this.width
-        // else if (u > this.width - 1)
-        //     u -= this.width
-        // if (v < 0)
-        //     v += this.height
-        // else if (v > this.height - 1)
-        //     v -= this.height
+        if (u < 0)
+            u += this.width
+        else if (u > this.width - 1)
+            u -= this.width
+        if (v < 0)
+            v += this.height
+        else if (v > this.height - 1)
+            v -= this.height
 
-        // 0,0 at edges
-        if(u < 0 || u > this.width - 1 || v < 0 || v > this.height - 1) {
-            return [1, 0]
-        }
+        // if(u < 0 || u > this.width - 1 || v < 0 || v > this.height - 1) {
+        //     return [1, 0]
+        // }
 
         const pos = u + v * this.width
         return [this.dataA[pos], this.dataB[pos]]
@@ -97,6 +96,11 @@ class State {
         }
         return this.pixels
     }
+
+    copy() {
+        let n = new State(this.width, this.height)
+        return n
+    }
 }
 
 /// Picture, mainly drawing of the state
@@ -124,15 +128,23 @@ class Config {
     constructor() {
         this.Da = 1.0
         this.Db = 0.4
-        this.f = 0.055
-        this.k = 0.062
+        this.f = 0.04
+        this.k = 0.06
         this.dt = 1.0
+
+        // Flower thing
+        // this.f = 0.06
+        // this.k = 0.06
+        // Different rounder flower
+        // this.f = 0.05
+        // this.k = 0.06
     }
 }
 
 class App {
     constructor(state, config) {
         this.state = state
+        this.next = state.copy()
         this.config = config
 
         this.canvas = new Picture(state)
@@ -151,10 +163,17 @@ class App {
     update(dt) {
         for (let i = 0; i < 10; i++) {
             this.updateAll()
+            this.swap()
         }
 
         this.state.updatePixels()
         this.draw()
+    }
+
+    swap() {
+        let temp = this.state
+        this.state = this.next
+        this.next = temp
     }
 
 
@@ -172,15 +191,18 @@ class App {
         const la = this.laplace(u, v, this.state, 0)
         const lb = this.laplace(u, v, this.state, 1)
 
+        // Different values depending on position
         // let k = (u / this.state.width) * (0.07 - 0.045) + 0.045
-        let k = 0.06
-        let f = 0.05
+        // let k = 0.06
+        // let f = 0.05
         // let f = (v / this.state.width) * (0.1 - 0.01) + 0.01
+        let f = this.config.f
+        let k = this.config.k
 
         let an = a + (this.config.Da * la - a * b * b + f * (1 - a)) * dt * this.config.dt
         let bn = b + (this.config.Db * lb + a * b * b - (k + f) * b) * dt * this.config.dt
 
-        this.state.setPoint(u, v, an, bn)
+        this.next.setPoint(u, v, an, bn)
     }
 
     laplace(u, v, state, t) {
@@ -205,10 +227,9 @@ class App {
 }
 
 function start() {
-    let size = 200
+    let size = 400
     const state = new State(size, size)
-    state.seedAtPoint(20, 50, 10)
-    state.seedAtPoint(60, 20, 10)
+    state.seedAtPoint(size/2, size/2, 10)
 
     const config = new Config()
 
